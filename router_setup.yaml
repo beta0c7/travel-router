@@ -68,15 +68,15 @@
       register: admin_pass_hash
       changed_when: false
 
-    # 2. Write the Hashed Password (UNCOMMENTED & FIXED)
-    - name: Update RaspAP Admin Password
-      copy:
-        dest: /etc/raspap/raspap.auth
-        # Writes "admin:$2y$10$..." to the file
-        content: "admin:{{ admin_pass_hash.stdout }}"
-        owner: root
-        group: www-data
-        mode: '0640'
+    # 2. Write the Hashed Password 
+    # - name: Update RaspAP Admin Password
+    #   copy:
+    #     dest: /etc/raspap/raspap.auth
+    #     # Writes "admin:$2y$10$..." to the file
+    #     content: "admin:{{ admin_pass_hash.stdout }}"
+    #     owner: root
+    #     group: www-data
+    #     mode: '0640'
 
     # 3. Configure DNS (Cloudflare + Google)
     - name: Configure DHCP DNS Servers (1.1.1.1, 8.8.8.8)
