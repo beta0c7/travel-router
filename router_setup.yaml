@@ -14,15 +14,22 @@
 
   tasks:
     # --- STEP 1: SYSTEM PREP ---
+    # Task A: Update the OS (apt-get dist-upgrade)
     - name: Update and upgrade apt packages
       apt:
         update_cache: yes
         upgrade: dist
+        cache_valid_time: 3600  # Optional: Don't update if done recently
+
+    # Task B: Install specific tools
+    - name: Install required dependencies
+      apt:
         pkg:
           - i2c-tools
           - util-linux
           - python3-pip
           - git
+        state: present
 
     # --- STEP 2: HARDWARE (I2C & RTC) ---
     - name: Enable I2C interface
