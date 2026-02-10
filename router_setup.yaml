@@ -1,0 +1,108 @@
+- name: Setup Travel Router
+  hosts: localhost
+  connection: local
+  become: yes
+
+  # Default variables (in case script is run without them)
+  vars:
+    wifi_ssid: "TravelRouterDefault"
+    wifi_password: "ChangeMe123!"
+    wifi_channel: "36"
+    country_code: "US"
+    # Detect config location (Bookworm vs Bullseye)
+    config_file: "{{ '/boot/firmware/config.txt' if query('file', '/boot/firmware/config.txt') else '/boot/config.txt' }}"
+
+  tasks:
+    # --- STEP 1: SYSTEM PREP ---
+    - name: Update and upgrade apt packages
+      apt:
+        update_cache: yes
+        upgrade: dist
+        pkg:
+          - i2c-tools
+          - util-linux
+          - python3-pip
+          - git
+
+    # --- STEP 2: HARDWARE (I2C & RTC) ---
+    - name: Enable I2C interface
+      lineinfile:
+        path: "{{ config_file }}"
+        regexp: '^dtparam=i2c_arm='
+        line: 'dtparam=i2c_arm=on'
+        state: present
+
+    - name: Add RTC Overlay
+      lineinfile:
+        path: "{{ config_file }}"
+        line: 'dtoverlay=i2c-rtc,ds3231'
+        state: present
+
+    - name: Load i2c-dev module
+      lineinfile:
+        path: /etc/modules
+        line: 'i2c-dev'
+        state: present
+
+    # --- STEP 3: INSTALL RASPAP ---
+    - name: Install RaspAP (Non-interactive)
+      shell: curl -sL https://install.raspap.com | bash -s -- -y
+      args:
+        creates: /var/www/html/index.php
+
+    # --- STEP 4: CONFIGURATION ---
+    - name: Update RaspAP Admin Password
+      copy:
+        dest: /etc/raspap/raspap.auth
+        content: "admin:{{ admin_password }}"
+        owner: root
+        group: www-data
+        mode: '0640'
+    
+    - name: Deploy Custom Hostapd Config
+      template:
+        src: "{{ playbook_dir }}/files/hostapd.conf.j2"
+        dest: /etc/hostapd/hostapd.conf
+        owner: root
+        group: root
+        mode: '0644'
+      notify: Restart Hostapd
+
+    - name: Deploy LED Status Script
+      copy:
+        src: "{{ playbook_dir }}/files/router_status.sh"
+        dest: /usr/local/bin/router_status.sh
+        mode: '0755'
+
+    - name: Create LED Service
+      copy:
+        dest: /etc/systemd/system/router-led.service
+        content: |
+          [Unit]
+          Description=Router Status LED indicator
+          After=network.target
+
+          [Service]
+          ExecStart=/usr/local/bin/router_status.sh
+          Restart=always
+          User=root
+
+          [Install]
+          WantedBy=multi-user.target
+      notify: Reload Systemd
+
+    - name: Enable LED Service
+      systemd:
+        name: router-led
+        enabled: yes
+        state: started
+
+  handlers:
+    - name: Restart Hostapd
+      systemd:
+        name: hostapd
+        state: restarted
+
+    - name: Reload Systemd
+      systemd:
+        daemon_reload: yes
