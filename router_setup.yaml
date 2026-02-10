@@ -58,10 +58,18 @@
         creates: /var/www/html/index.php
 
     # --- STEP 4: CONFIGURATION ---
+    # Generate the Hash using PHP (Since RaspAP installs PHP, this is safe)
+    - name: Generate Admin Password Hash
+      shell: php -r 'echo password_hash("{{ admin_password }}", PASSWORD_BCRYPT);'
+      register: admin_pass_hash
+      changed_when: false
+
+    # Write the Hashed Password to the Auth File
     - name: Update RaspAP Admin Password
       copy:
         dest: /etc/raspap/raspap.auth
-        content: "admin:{{ admin_password }}"
+        # This writes "admin:$2y$10$..." instead of "admin:secret"
+        content: "admin:{{ admin_pass_hash.stdout }}"
         owner: root
         group: www-data
         mode: '0640'
