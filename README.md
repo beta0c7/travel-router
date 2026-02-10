@@ -41,4 +41,4 @@ When traveling, connecting multiple devices (laptop, tablet, Kindle, Nintendo Sw
 3.  **SSH into the Pi** and run this one-line installer:
 
 ```bash
-curl -L https://raw.githubusercontent.com/beta0c7/travel-router/main/setup.sh | sudo bash
+curl -L https://raw.githubusercontent.com/beta0c7/travel-router/master/setup.sh | sudo bash
