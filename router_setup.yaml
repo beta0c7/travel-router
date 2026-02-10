@@ -9,17 +9,19 @@
     wifi_password: "ChangeMe123!"
     wifi_channel: "36"
     country_code: "US"
+    admin_password: "secret"
     # Detect config location (Bookworm vs Bullseye)
     config_file: "{{ '/boot/firmware/config.txt' if query('file', '/boot/firmware/config.txt') else '/boot/config.txt' }}"
 
   tasks:
     # --- STEP 1: SYSTEM PREP ---
-    # Task A: Update the OS (apt-get dist-upgrade)
+    
+    # Task A: Update the OS
     - name: Update and upgrade apt packages
       apt:
         update_cache: yes
         upgrade: dist
-        cache_valid_time: 3600  # Optional: Don't update if done recently
+        cache_valid_time: 3600
 
     # Task B: Install specific tools
     - name: Install required dependencies
@@ -29,6 +31,7 @@
           - util-linux
           - python3-pip
           - git
+          - php-cli  # Added this so the password hash task works
         state: present
 
     # --- STEP 2: HARDWARE (I2C & RTC) ---
@@ -58,33 +61,33 @@
         creates: /var/www/html/index.php
 
     # --- STEP 4: CONFIGURATION ---
-    # Generate the Hash using PHP (Since RaspAP installs PHP, this is safe)
+    
+    # 1. Generate the Hash using PHP
     - name: Generate Admin Password Hash
       shell: php -r 'echo password_hash("{{ admin_password }}", PASSWORD_BCRYPT);'
       register: admin_pass_hash
       changed_when: false
 
-    # Write the Hashed Password to the Auth File
-    # - name: Update RaspAP Admin Password
-    #   copy:
-    #     dest: /etc/raspap/raspap.auth
-    #     # This writes "admin:$2y$10$..." instead of "admin:secret"
-    #     content: "admin:{{ admin_pass_hash.stdout }}"
-    #     owner: root
-    #     group: www-data
-    #     mode: '0640'
+    # 2. Write the Hashed Password (UNCOMMENTED & FIXED)
+    - name: Update RaspAP Admin Password
+      copy:
+        dest: /etc/raspap/raspap.auth
+        # Writes "admin:$2y$10$..." to the file
+        content: "admin:{{ admin_pass_hash.stdout }}"
+        owner: root
+        group: www-data
+        mode: '0640'
 
-    # Force the Router to use specific DNS for clients
+    # 3. Configure DNS (Cloudflare + Google)
     - name: Configure DHCP DNS Servers (1.1.1.1, 8.8.8.8)
       lineinfile:
         path: /etc/dnsmasq.d/090_raspap.conf
-        # Look for existing DNS line (starts with dhcp-option=6)
         regexp: '^dhcp-option=6'
-        # Replace it with your preferred servers
         line: 'dhcp-option=6,1.1.1.1,8.8.8.8'
         state: present
       notify: Restart Dnsmasq
     
+    # 4. Deploy WiFi Config
     - name: Deploy Custom Hostapd Config
       template:
         src: "{{ playbook_dir }}/files/hostapd.conf.j2"
@@ -94,6 +97,7 @@
         mode: '0644'
       notify: Restart Hostapd
 
+    # 5. Deploy LED Scripts
     - name: Deploy LED Status Script
       copy:
         src: "{{ playbook_dir }}/files/router_status.sh"
@@ -123,10 +127,17 @@
         enabled: yes
         state: started
 
+  # --- HANDLERS (Fixed missing entries) ---
   handlers:
     - name: Restart Hostapd
       systemd:
         name: hostapd
+        state: restarted
+
+    # This was missing and causing your error
+    - name: Restart Dnsmasq
+      systemd:
+        name: dnsmasq
         state: restarted
 
     - name: Reload Systemd
