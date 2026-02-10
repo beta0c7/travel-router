@@ -73,6 +73,17 @@
         owner: root
         group: www-data
         mode: '0640'
+
+    # Force the Router to use specific DNS for clients
+    - name: Configure DHCP DNS Servers (1.1.1.1, 8.8.8.8)
+      lineinfile:
+        path: /etc/dnsmasq.d/090_raspap.conf
+        # Look for existing DNS line (starts with dhcp-option=6)
+        regexp: '^dhcp-option=6'
+        # Replace it with your preferred servers
+        line: 'dhcp-option=6,1.1.1.1,8.8.8.8'
+        state: present
+      notify: Restart Dnsmasq
     
     - name: Deploy Custom Hostapd Config
       template:
