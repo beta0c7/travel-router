@@ -65,14 +65,14 @@
       changed_when: false
 
     # Write the Hashed Password to the Auth File
-    - name: Update RaspAP Admin Password
-      copy:
-        dest: /etc/raspap/raspap.auth
-        # This writes "admin:$2y$10$..." instead of "admin:secret"
-        content: "admin:{{ admin_pass_hash.stdout }}"
-        owner: root
-        group: www-data
-        mode: '0640'
+    # - name: Update RaspAP Admin Password
+    #   copy:
+    #     dest: /etc/raspap/raspap.auth
+    #     # This writes "admin:$2y$10$..." instead of "admin:secret"
+    #     content: "admin:{{ admin_pass_hash.stdout }}"
+    #     owner: root
+    #     group: www-data
+    #     mode: '0640'
 
     # Force the Router to use specific DNS for clients
     - name: Configure DHCP DNS Servers (1.1.1.1, 8.8.8.8)
