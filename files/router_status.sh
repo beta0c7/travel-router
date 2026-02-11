@@ -1,61 +1,81 @@
 #!/bin/bash
 
 # --- CONFIGURATION ---
-# Green LED (Activity)
-GREEN_LED="/sys/class/leds/ACT"
-# Red LED (Power) - Note: This disables the undervoltage warning!
-RED_LED="/sys/class/leds/PWR"
+VPN_CONF="/etc/wireguard/wg0.conf"
+VPN_IFACE="wg0"
+PING_TARGET="1.1.1.1"
 
-# Function to check internet
-check_internet() {
-    # Ping Google DNS. Returns 0 if successful.
-    ping -q -c 1 -W 2 8.8.8.8 > /dev/null
-}
-
-# Initial setup: Reset triggers for both
-echo none | sudo tee $GREEN_LED/trigger > /dev/null
-echo none | sudo tee $RED_LED/trigger > /dev/null
-
-while true; do
-    if check_internet; then
-        # --- CONNECTED (BOTH SOLID ON) ---
-        
-        # Check current trigger to avoid unnecessary writes
-        current_trigger=$(cat $GREEN_LED/trigger | grep -o "\[none\]")
-        
-        if [ -z "$current_trigger" ]; then
-             # Set Green to Solid
-             echo none | sudo tee $GREEN_LED/trigger > /dev/null
-             echo 1 | sudo tee $GREEN_LED/brightness > /dev/null
-             
-             # Set Red to Solid
-             echo none | sudo tee $RED_LED/trigger > /dev/null
-             echo 1 | sudo tee $RED_LED/brightness > /dev/null
-        else
-             # Ensure they stay bright (Red sometimes defaults to off if touched)
-             echo 1 | sudo tee $GREEN_LED/brightness > /dev/null
-             echo 1 | sudo tee $RED_LED/brightness > /dev/null
-        fi
-        
-    else
-        # --- DISCONNECTED (BOTH FAST BLINK) ---
-        
-        current_trigger=$(cat $GREEN_LED/trigger | grep -o "\[timer\]")
-        
-        if [ -z "$current_trigger" ]; then
-            # Set Green to Blink
-            echo timer | sudo tee $GREEN_LED/trigger > /dev/null
-            echo 200 | sudo tee $GREEN_LED/delay_on > /dev/null
-            echo 200 | sudo tee $GREEN_LED/delay_off > /dev/null
-            
-            # Set Red to Blink
-            echo timer | sudo tee $RED_LED/trigger > /dev/null
-            echo 200 | sudo tee $RED_LED/delay_on > /dev/null
-            echo 200 | sudo tee $RED_LED/delay_off > /dev/null
-        fi
+# Automatically find the Green Activity LED
+LED_PATH=""
+for led in /sys/class/leds/led0 /sys/class/leds/ACT; do
+    if [ -d "$led" ]; then
+        LED_PATH="$led"
+        break
     fi
-    
-    # Wait 5 seconds before checking again
-    sleep 5
 done
 
+# Helper to set LED behavior
+set_led() {
+    # $1: trigger (none = solid, timer = blink)
+    # $2: brightness (1 = on, 0 = off)
+    if [ -n "$LED_PATH" ]; then
+        echo "$1" > "$LED_PATH/trigger"
+        if [ -n "$2" ]; then
+            echo "$2" > "$LED_PATH/brightness"
+        fi
+    fi
+}
+
+# --- MAIN LOOP ---
+while true; do
+    # 1. Check Internet Connectivity
+    if ping -c 1 -W 2 "$PING_TARGET" > /dev/null 2>&1; then
+        NET_UP=true
+    else
+        NET_UP=false
+    fi
+
+    # 2. Check if VPN is Configured AND Active
+    VPN_ACTIVE=false
+    VPN_REQUIRED=false
+
+    if [ -f "$VPN_CONF" ]; then
+        # VPN config exists, so we MUST use it
+        VPN_REQUIRED=true
+        if ip link show "$VPN_IFACE" up > /dev/null 2>&1; then
+            VPN_ACTIVE=true
+        fi
+    fi
+
+    # --- DECISION LOGIC ---
+    
+    # CASE A: VPN is configured (High Security Mode)
+    if [ "$VPN_REQUIRED" = true ]; then
+        if [ "$VPN_ACTIVE" = true ] && [ "$NET_UP" = true ]; then
+            # ✅ SECURE (VPN Up + Net Up) -> SOLID GREEN
+            echo "none" > "$LED_PATH/trigger"
+            echo "1" > "$LED_PATH/brightness"
+        else
+            # ⚠️ UNSAFE (VPN Down OR Net Down) -> BLINK
+            echo "timer" > "$LED_PATH/trigger"
+            echo 100 > "$LED_PATH/delay_on"
+            echo 100 > "$LED_PATH/delay_off"
+        fi
+
+    # CASE B: No VPN configured (Standard Travel Router Mode)
+    else
+        if [ "$NET_UP" = true ]; then
+            # ✅ ONLINE (Net Up) -> SOLID GREEN
+            echo "none" > "$LED_PATH/trigger"
+            echo "1" > "$LED_PATH/brightness"
+        else
+            # ❌ OFFLINE (Net Down) -> BLINK SLOWLY
+            echo "timer" > "$LED_PATH/trigger"
+            echo 500 > "$LED_PATH/delay_on"
+            echo 500 > "$LED_PATH/delay_off"
+        fi
+    fi
+
+    # Check again in 5 seconds
+    sleep 5
+done
