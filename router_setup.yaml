@@ -3,7 +3,7 @@
   connection: local
   become: yes
 
-  # Default variables (in case script is run without them)
+  # Default variables
   vars:
     wifi_ssid: "TravelRouterDefault"
     wifi_password: "ChangeMe123!"
@@ -15,7 +15,6 @@
 
   tasks:
     # --- STEP 1: SYSTEM PREP ---
-    
     # Task A: Update the OS
     - name: Update and upgrade apt packages
       apt:
@@ -31,7 +30,7 @@
           - util-linux
           - python3-pip
           - git
-          - php-cli  # Added this so the password hash task works
+          - php-cli
         state: present
 
     # --- STEP 2: HARDWARE (I2C & RTC) ---
@@ -68,10 +67,13 @@
       register: admin_pass_hash
       changed_when: false
 
-    # 2. Write the Hashed Password 
+    # 2. Write the Hashed Password (Newline Format)
     - name: Update RaspAP Admin Password
       copy:
         dest: /etc/raspap/raspap.auth
+        # This format ensures:
+        # Line 1: admin
+        # Line 2: $2y$10$... (The Hash)
         content: |
           admin
           {{ admin_pass_hash.stdout }}
@@ -79,13 +81,25 @@
         group: www-data
         mode: '0640'
 
-    # 3. Configure DNS (Cloudflare + Google)
-    - name: Configure DHCP DNS Servers (1.1.1.1, 8.8.8.8)
+    # 3. DNS Configuration (The Fix for AdBlock + Internet)
+    
+    # A. Tell Clients (Phones) to use the Pi (10.3.141.1) so AdBlock works
+    - name: Configure Clients to use Pi DNS
       lineinfile:
-        path: /etc/dnsmasq.d/090_wlan0.conf
+        path: /etc/dnsmasq.d/090_raspap.conf
         regexp: '^dhcp-option=6'
         line: 'dhcp-option=6,10.3.141.1'
         state: present
+      notify: Restart Dnsmasq
+
+    # B. Tell the Pi to use Cloudflare/Google for real Internet
+    - name: Configure Upstream DNS (1.1.1.1, 8.8.8.8)
+      blockinfile:
+        path: /etc/dnsmasq.d/090_raspap.conf
+        marker: "# {mark} ANSIBLE UPSTREAM DNS"
+        block: |
+          server=1.1.1.1
+          server=8.8.8.8
       notify: Restart Dnsmasq
     
     # 4. Deploy WiFi Config
@@ -128,14 +142,13 @@
         enabled: yes
         state: started
 
-  # --- HANDLERS (Fixed missing entries) ---
+  # --- HANDLERS ---
   handlers:
     - name: Restart Hostapd
       systemd:
         name: hostapd
         state: restarted
 
-    # This was missing and causing your error
     - name: Restart Dnsmasq
       systemd:
         name: dnsmasq
