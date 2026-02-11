@@ -13,16 +13,20 @@ When traveling, connecting multiple devices (laptop, tablet, Kindle, Nintendo Sw
 1.  **One Connection:** You only connect the Pi to the internet (Hotel/Phone).
 2.  **Private Network:** All your devices connect to the Pi once and never need to be reconfigured.
 3.  **Bypassing Limits:** The hotel sees only *one* device (the Pi).
-4.  **VPN Ready:** (Optional) You can easily add WireGuard/OpenVPN to secure all traffic.
+4.  **VPN Ready:** Pre-installed WireGuard and OpenResolv for secure tunneling.
 5.  **Ad Blocking:** (Optional) Includes ad-blocking DNS capabilities via RaspAP.
 
 ## ✨ Features
-* **Fully Automated Setup:** One command installs everything.
+* **Interactive Setup CLI:** Guided script prompts for all configuration details.
 * **Dual-Band WiFi:** Configured for high-performance 5GHz (80MHz width) AC/WiFi 5.
 * **Auto-Connect:** Automatically connects to your saved hotspots (iPhone/Android) on boot.
-* **Status LEDs:**
-    * **Solid Green/Red:** Internet Connected.
-    * **Blinking:** Searching for Internet.
+* **Smart Status LEDs:**
+    * **Standard Mode:**
+        * **Solid Green:** Online (Internet Connected).
+        * **Slow Blink:** Offline (No Internet).
+    * **VPN Mode (if WireGuard configured):**
+        * **Solid Green:** Secure (VPN Connected + Internet Up).
+        * **Fast Blink:** Unsafe (VPN Down or Internet Down).
 * **Hardware RTC Support:** Automatically configures DS3231 I2C Real-Time Clock for offline timekeeping.
 * **Security:** Forces WPA2-AES encryption and changes default passwords.
 * **Admin Interface:** Includes **RaspAP** web GUI for easy management (`10.3.141.1`).
@@ -42,3 +46,13 @@ When traveling, connecting multiple devices (laptop, tablet, Kindle, Nintendo Sw
 
 ```bash
 curl -L https://raw.githubusercontent.com/beta0c7/travel-router/master/setup.sh | sudo bash
+```
+
+4.  **Follow the Prompts:** The script will ask you for:
+    *   **WiFi Name (SSID):** Name for your new travel network.
+    *   **WiFi Password:** Password for the network.
+    *   **WiFi Channel:** (Default: 36)
+    *   **Country Code:** (Default: US)
+    *   **Admin Password:** Login for the RaspAP web interface.
+
+The script will automatically install Ansible, configure the system, and reboot when finished.

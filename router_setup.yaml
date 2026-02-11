@@ -10,17 +10,19 @@
     wifi_channel: "36"
     country_code: "US"
     admin_password: "secret"
-    # Detect config location
+    # Detect config location (Bookworm vs Bullseye)
     config_file: "{{ '/boot/firmware/config.txt' if query('file', '/boot/firmware/config.txt') else '/boot/config.txt' }}"
 
   tasks:
     # --- STEP 1: SYSTEM PREP ---
+    # Task A: Update the OS
     - name: Update and upgrade apt packages
       apt:
         update_cache: yes
         upgrade: dist
         cache_valid_time: 3600
 
+    # Task B: Install specific tools
     - name: Install required dependencies
       apt:
         pkg:
@@ -29,9 +31,6 @@
           - python3-pip
           - git
           - php-cli
-          # VPN SUPPORT
-          - wireguard
-          - openresolv
         state: present
 
     # --- STEP 2: HARDWARE (I2C & RTC) ---
@@ -62,16 +61,19 @@
 
     # --- STEP 4: CONFIGURATION ---
     
-    # 1. Generate the Hash
+    # 1. Generate the Hash using PHP
     - name: Generate Admin Password Hash
       shell: php -r 'echo password_hash("{{ admin_password }}", PASSWORD_BCRYPT);'
       register: admin_pass_hash
       changed_when: false
 
-    # 2. Write the Hashed Password
+    # 2. Write the Hashed Password (Newline Format)
     - name: Update RaspAP Admin Password
       copy:
         dest: /etc/raspap/raspap.auth
+        # This format ensures:
+        # Line 1: admin
+        # Line 2: $2y$10$... (The Hash)
         content: |
           admin
           {{ admin_pass_hash.stdout }}
@@ -79,7 +81,9 @@
         group: www-data
         mode: '0640'
 
-    # 3. DNS Configuration (AdBlock + Internet Fix)
+    # 3. DNS Configuration (The Fix for AdBlock + Internet)
+    
+    # A. Tell Clients (Phones) to use the Pi (10.3.141.1) so AdBlock works
     - name: Configure Clients to use Pi DNS
       lineinfile:
         path: /etc/dnsmasq.d/090_raspap.conf
@@ -88,6 +92,7 @@
         state: present
       notify: Restart Dnsmasq
 
+    # B. Tell the Pi to use Cloudflare/Google for real Internet
     - name: Configure Upstream DNS (1.1.1.1, 8.8.8.8)
       blockinfile:
         path: /etc/dnsmasq.d/090_raspap.conf
